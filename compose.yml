@@ -1,0 +1,65 @@
+version: "3.8"
+
+services:
+  n8n:
+    image: n8nio/n8n:2.0.2
+    container_name: n8n
+    depends_on:
+      - postgres
+    expose:
+      - "5678"
+    environment:
+      - N8N_PATH=/n8n/
+      - N8N_HOST=${N8N_HOST}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=${WEBHOOK_URL}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=${DB_POSTGRESDB_PORT}
+      - DB_POSTGRESDB_DATABASE=${DB_POSTGRESDB_DATABASE}
+      - DB_POSTGRESDB_USER=${DB_POSTGRESDB_USER}
+      - DB_POSTGRESDB_PASSWORD=${DB_POSTGRESDB_PASSWORD}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    container_name: n8n-postgres
+    environment:
+      - POSTGRES_USER=${DB_POSTGRESDB_USER}
+      - POSTGRES_PASSWORD=${DB_POSTGRESDB_PASSWORD}
+      - POSTGRES_DB=${DB_POSTGRESDB_DATABASE}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  hasura:
+    image: hasura/graphql-engine:v2.42.0
+    container_name: hasura
+    depends_on:
+      - postgres
+    expose:
+      - "8080"
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgres://${DB_POSTGRESDB_USER}:${DB_POSTGRESDB_PASSWORD}@postgres:${DB_POSTGRESDB_PORT}/${DB_POSTGRESDB_DATABASE}
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:latest
+    container_name: n8n-nginx
+    depends_on:
+      - n8n
+      - hasura
+    ports:
+      - "80:80"  # ← 0.0.0.0:80 доступно с любого IP
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+
+volumes:
+  n8n_data:
+  postgres_data:
